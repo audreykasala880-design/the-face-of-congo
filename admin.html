@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a1a">
+    <title>Administration - The Face of Congo</title>
+    <link rel="icon" href="/icons/app-icon.svg" type="image/svg+xml">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="stylesheet" href="/style.css">
+    <script src="/pwa.js" defer></script>
+    <script src="/admin.js" defer></script>
+</head>
+<body class="admin-body">
+<main class="admin-container">
+    <section id="login-panel" class="login-panel">
+        <img class="brand-logo" src="/logo.svg" alt="Logo The Face of Congo">
+        <p class="eyebrow">Kazert Évent</p>
+        <h1>Administration</h1>
+        <p>THE FACE OF CONGO · Candidatures</p>
+        <p id="login-message" class="notice notice-error" role="alert" hidden></p>
+        <form id="login-form" class="login-form">
+            <label for="username">Identifiant administrateur</label>
+            <input id="username" name="username" type="text" autocomplete="username" required>
+            <label for="password">Mot de passe</label>
+            <input id="password" name="password" type="password" autocomplete="current-password" required>
+            <button class="submit-btn" type="submit">Se connecter</button>
+        </form>
+        <button class="install-button" type="button" data-install-app hidden>Installer l’application</button>
+        <a class="back-link" href="/">Retour au formulaire</a>
+    </section>
+
+    <section id="dashboard" hidden>
+        <header class="admin-header">
+            <div>
+                <img class="admin-logo" src="/logo.svg" alt="Logo The Face of Congo">
+                <p class="eyebrow">Kazert Évent / Administration</p>
+                <h1>Candidatures</h1>
+                <p>THE FACE OF CONGO</p>
+            </div>
+            <div class="admin-actions">
+                <button id="enable-notifications" class="logout-btn" type="button">Activer les notifications</button>
+                <button class="install-button" type="button" data-install-app hidden>Installer l’application</button>
+                <button id="logout-button" class="logout-btn" type="button">Déconnexion</button>
+            </div>
+        </header>
+        <p id="dashboard-message" class="notice" role="status" hidden></p>
+        <section class="stats-grid" aria-label="Résumé des candidatures">
+            <div class="stat-item"><span>Total</span><strong id="count-total">0</strong></div>
+            <div class="stat-item"><span>Reçues</span><strong id="count-received">0</strong></div>
+            <div class="stat-item"><span>En cours</span><strong id="count-progress">0</strong></div>
+            <div class="stat-item"><span>Acceptées</span><strong id="count-accepted">0</strong></div>
+            <div class="stat-item"><span>Refusées</span><strong id="count-rejected">0</strong></div>
+        </section>
+        <section class="applications-section">
+            <div class="section-heading">
+                <h2>Demandes reçues</h2>
+                <span id="result-count">0 résultat(s)</span>
+            </div>
+            <p id="empty-state" class="empty-state" hidden>Aucune candidature pour le moment.</p>
+            <div id="table-scroll" class="table-scroll" hidden>
+                <table class="applications-table">
+                    <thead>
+                        <tr><th>Candidat</th><th>Contact</th><th>Ville</th><th>Reçue le</th><th>Statut</th></tr>
+                    </thead>
+                    <tbody id="applications-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </section>
+</main>
+</body>
+</html>

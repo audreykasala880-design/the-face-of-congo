@@ -1,0 +1,20 @@
+{
+  "id": "/",
+  "name": "The Face of Congo",
+  "short_name": "Face of Congo",
+  "description": "Candidatures au concours The Face of Congo",
+  "lang": "fr-CD",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f9f9f9",
+  "theme_color": "#1a1a1a",
+  "icons": [
+    {
+      "src": "/icons/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

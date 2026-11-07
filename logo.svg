@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title">
+  <title id="title">The Face of Congo</title>
+  <rect width="128" height="128" rx="26" fill="#1a1a1a"/>
+  <circle cx="64" cy="64" r="49" fill="none" stroke="#d4af37" stroke-width="2"/>
+  <path d="M72 27c-16 0-28 12-28 29v15c0 12 6 22 17 28l5 8h28l-8-16c11-8 17-20 17-34 0-17-13-30-31-30Z" fill="#d4af37"/>
+  <path d="M47 58c6-3 12-8 15-15 5 9 12 13 24 15l-4 5 5 5-7 4c-2 12-10 20-21 20-11-6-17-15-17-27 0-3 1-5 5-7Z" fill="#1a1a1a"/>
+  <path d="M61 63c3-2 6-2 9 0M80 66h9M63 81c5 3 10 3 15 0" fill="none" stroke="#d4af37" stroke-linecap="round" stroke-width="2.5"/>
+</svg>
