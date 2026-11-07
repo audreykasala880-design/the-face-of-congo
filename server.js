@@ -11,6 +11,7 @@ import multer from 'multer';
 import mysql from 'mysql2/promise';
 import nodemailer from 'nodemailer';
 import { cloudinaryStorage, CloudinaryUnavailableError } from './cloudinary-storage.js';
+import { createCsrfToken, verifyCsrfToken } from './csrf.js';
 import { MySQLSessionStore } from './mysql-session-store.js';
 import { normalizeApplication, ValidationError } from './validation.js';
 
@@ -80,8 +81,18 @@ function destroySession(request) {
 
 function requireCsrf(request, response, next) {
   const provided = request.get('x-csrf-token') || '';
-  const expected = request.session.csrfToken || '';
-  if (!provided || !expected || !safeEqual(provided, expected)) {
+  const origin = request.get('origin');
+  const fetchSite = request.get('sec-fetch-site');
+  let originMatches = fetchSite !== 'cross-site';
+  if (origin) {
+    try {
+      const requestOrigin = new URL(`${request.protocol}://${request.get('host')}`).origin;
+      originMatches = origin === requestOrigin && fetchSite !== 'cross-site';
+    } catch {
+      originMatches = false;
+    }
+  }
+  if (!originMatches || !verifyCsrfToken(provided, process.env.SESSION_SECRET)) {
     return response.status(403).json({ error: 'Requête expirée. Rechargez la page et réessayez.' });
   }
   next();
@@ -177,15 +188,9 @@ app.get('/health', async (request, response, next) => {
   }
 });
 
-app.get('/api/csrf', async (request, response, next) => {
-  try {
-    request.session.csrfToken ??= randomBytes(32).toString('hex');
-    await saveSession(request);
-    response.set('Cache-Control', 'no-store');
-    response.json({ csrfToken: request.session.csrfToken });
-  } catch (error) {
-    next(error);
-  }
+app.get('/api/csrf', (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.json({ csrfToken: createCsrfToken(process.env.SESSION_SECRET) });
 });
 
 app.post('/api/admin/login', loginLimiter, requireCsrf, async (request, response, next) => {
@@ -200,10 +205,9 @@ app.post('/api/admin/login', loginLimiter, requireCsrf, async (request, response
 
     await regenerateSession(request);
     request.session.adminAuthenticated = true;
-    request.session.csrfToken = randomBytes(32).toString('hex');
     await saveSession(request);
     response.set('Cache-Control', 'no-store');
-    response.json({ csrfToken: request.session.csrfToken });
+    response.json({ csrfToken: createCsrfToken(process.env.SESSION_SECRET) });
   } catch (error) {
     next(error);
   }
