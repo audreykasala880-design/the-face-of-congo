@@ -8,15 +8,19 @@ let csrfToken = '';
 let knownApplicationIds = null;
 let notificationTimer = null;
 
-async function api(url, options = {}) {
+async function api(url, options = {}, retryExpiredCsrf = true) {
   const headers = new Headers(options.headers || {});
   if (csrfToken && options.method && options.method !== 'GET') {
     headers.set('X-CSRF-Token', csrfToken);
   }
-  const response = await fetch(url, { ...options, headers, cache: 'no-store' });
+  const response = await fetch(url, { ...options, headers, cache: 'no-store', credentials: 'same-origin' });
   if (response.status === 204) return null;
   const result = await response.json();
   if (!response.ok) {
+    if (response.status === 403 && retryExpiredCsrf && result.error?.startsWith('Requête expirée')) {
+      await loadCsrfToken();
+      return api(url, options, false);
+    }
     const error = new Error(result.error || 'Une erreur est survenue.');
     error.status = response.status;
     throw error;

@@ -139,11 +139,20 @@ const loginLimiter = rateLimit({
 });
 
 app.get('/', (request, response) => response.sendFile(join(directory, 'index.html')));
-app.get('/admin', (request, response) => response.sendFile(join(directory, 'admin.html')));
-app.get('/admin.html', (request, response) => response.sendFile(join(directory, 'admin.html')));
+app.get('/admin', (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.sendFile(join(directory, 'admin.html'));
+});
+app.get('/admin.html', (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.sendFile(join(directory, 'admin.html'));
+});
 app.get('/style.css', (request, response) => response.sendFile(join(directory, 'style.css')));
 app.get('/app.js', (request, response) => response.sendFile(join(directory, 'app.js')));
-app.get('/admin.js', (request, response) => response.sendFile(join(directory, 'admin.js')));
+app.get('/admin.js', (request, response) => {
+  response.set('Cache-Control', 'no-store');
+  response.sendFile(join(directory, 'admin.js'));
+});
 app.get('/pwa.js', (request, response) => response.sendFile(join(directory, 'pwa.js')));
 app.get('/logo.svg', (request, response) => response.sendFile(join(directory, 'logo.svg')));
 app.get('/manifest.webmanifest', (request, response) => response.sendFile(join(directory, 'manifest.webmanifest')));

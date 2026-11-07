@@ -1,4 +1,4 @@
-const cacheName = 'face-of-congo-shell-v1';
+const cacheName = 'face-of-congo-shell-v2';
 const shellFiles = [
   '/',
   '/admin',
@@ -30,6 +30,16 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => cached || fetch(request)),
+    fetch(request).then((response) => {
+      if (response.ok) {
+        const responseCopy = response.clone();
+        event.waitUntil(caches.open(cacheName).then((cache) => cache.put(request, responseCopy)));
+      }
+      return response;
+    }).catch(async () => {
+      const cached = await caches.match(request);
+      if (cached) return cached;
+      throw new Error('Ressource indisponible hors ligne.');
+    }),
   );
 });
