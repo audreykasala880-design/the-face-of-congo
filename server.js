@@ -66,6 +66,12 @@ function regenerateSession(request) {
   });
 }
 
+function saveSession(request) {
+  return new Promise((resolve, reject) => {
+    request.session.save((error) => error ? reject(error) : resolve());
+  });
+}
+
 function destroySession(request) {
   return new Promise((resolve, reject) => {
     request.session.destroy((error) => error ? reject(error) : resolve());
@@ -171,10 +177,15 @@ app.get('/health', async (request, response, next) => {
   }
 });
 
-app.get('/api/csrf', (request, response) => {
-  request.session.csrfToken ??= randomBytes(32).toString('hex');
-  response.set('Cache-Control', 'no-store');
-  response.json({ csrfToken: request.session.csrfToken });
+app.get('/api/csrf', async (request, response, next) => {
+  try {
+    request.session.csrfToken ??= randomBytes(32).toString('hex');
+    await saveSession(request);
+    response.set('Cache-Control', 'no-store');
+    response.json({ csrfToken: request.session.csrfToken });
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.post('/api/admin/login', loginLimiter, requireCsrf, async (request, response, next) => {
@@ -190,6 +201,7 @@ app.post('/api/admin/login', loginLimiter, requireCsrf, async (request, response
     await regenerateSession(request);
     request.session.adminAuthenticated = true;
     request.session.csrfToken = randomBytes(32).toString('hex');
+    await saveSession(request);
     response.set('Cache-Control', 'no-store');
     response.json({ csrfToken: request.session.csrfToken });
   } catch (error) {
