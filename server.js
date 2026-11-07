@@ -13,6 +13,7 @@ import nodemailer from 'nodemailer';
 import { cloudinaryStorage, CloudinaryUnavailableError } from './cloudinary-storage.js';
 import { createCsrfToken, verifyCsrfToken } from './csrf.js';
 import { MySQLSessionStore } from './mysql-session-store.js';
+import { configureProxyTrust } from './proxy-config.js';
 import { normalizeApplication, ValidationError } from './validation.js';
 
 const directory = dirname(fileURLToPath(import.meta.url));
@@ -121,7 +122,7 @@ const mailTransport = process.env.SMTP_HOST
 
 const app = express();
 app.disable('x-powered-by');
-if (process.env.TRUST_PROXY === 'true') app.set('trust proxy', 1);
+configureProxyTrust(app);
 app.use(helmet());
 app.use(express.json({ limit: '32kb' }));
 app.use(session({
