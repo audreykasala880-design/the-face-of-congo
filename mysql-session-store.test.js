@@ -4,8 +4,17 @@ import { MySQLSessionStore } from './mysql-session-store.js';
 
 class FakePool {
   sessions = new Map();
+  queries = [];
+  columns = ['session_id', 'expires_at', 'session_data'];
 
-  async query() {
+  async query(sql) {
+    this.queries.push(sql);
+    if (sql.includes('SHOW COLUMNS')) {
+      return [this.columns.map((Field) => ({ Field }))];
+    }
+    if (sql.includes('SHOW INDEX')) {
+      return [[{ Key_name: 'idx_admin_sessions_expires' }]];
+    }
     return [undefined];
   }
 
@@ -56,6 +65,31 @@ test('ne renvoie pas une session expirée', async () => {
   pool.sessions.set('expired', { expiresAt: Date.now() - 1, data: '{"adminAuthenticated":true}' });
   try {
     assert.equal(await storeCall(store, 'get', 'expired'), null);
+  } finally {
+    store.close();
+  }
+});
+
+test('migre le schéma historique expires/data sans perdre les sessions', async () => {
+  const pool = new FakePool();
+  pool.columns = ['session_id', 'expires', 'data'];
+  const store = new MySQLSessionStore(pool);
+  try {
+    await store.initialize();
+    assert.ok(pool.queries.some((query) => query.includes('CHANGE COLUMN expires expires_at')));
+    assert.ok(pool.queries.some((query) => query.includes('expires_at = expires_at * 1000')));
+    assert.ok(pool.queries.some((query) => query.includes('CHANGE COLUMN data session_data')));
+  } finally {
+    store.close();
+  }
+});
+
+test('ne modifie pas une table déjà au nouveau schéma', async () => {
+  const pool = new FakePool();
+  const store = new MySQLSessionStore(pool);
+  try {
+    await store.initialize();
+    assert.equal(pool.queries.some((query) => query.includes('CHANGE COLUMN')), false);
   } finally {
     store.close();
   }

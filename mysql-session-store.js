@@ -12,8 +12,8 @@ export class MySQLSessionStore extends session.Store {
     }, 15 * 60 * 1000).unref();
   }
 
-  initialize() {
-    return this.pool.query(`
+  async initialize() {
+    await this.pool.query(`
       CREATE TABLE IF NOT EXISTS admin_sessions (
         session_id VARCHAR(128) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
         expires_at BIGINT UNSIGNED NOT NULL,
@@ -22,6 +22,23 @@ export class MySQLSessionStore extends session.Store {
         INDEX idx_admin_sessions_expires (expires_at)
       ) ENGINE=InnoDB DEFAULT CHARACTER SET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    const [columns] = await this.pool.query('SHOW COLUMNS FROM admin_sessions');
+    const columnNames = new Set(columns.map((column) => column.Field));
+    if (columnNames.has('expires_at') && columnNames.has('session_data')) return;
+    if (!columnNames.has('expires') || !columnNames.has('data')) {
+      throw new Error('Schéma admin_sessions incompatible : colonnes expires/data ou expires_at/session_data attendues.');
+    }
+
+    await this.pool.query('ALTER TABLE admin_sessions CHANGE COLUMN expires expires_at BIGINT UNSIGNED NOT NULL');
+    await this.pool.query('UPDATE admin_sessions SET expires_at = expires_at * 1000 WHERE expires_at < 100000000000');
+    await this.pool.query("UPDATE admin_sessions SET data = '{}' WHERE data IS NULL");
+    await this.pool.query('ALTER TABLE admin_sessions CHANGE COLUMN data session_data MEDIUMTEXT NOT NULL');
+
+    const [indexes] = await this.pool.query('SHOW INDEX FROM admin_sessions');
+    if (!indexes.some((index) => index.Key_name === 'idx_admin_sessions_expires')) {
+      await this.pool.query('ALTER TABLE admin_sessions ADD INDEX idx_admin_sessions_expires (expires_at)');
+    }
   }
 
   get(sessionId, callback) {
