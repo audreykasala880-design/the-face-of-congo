@@ -11,7 +11,14 @@ import multer from 'multer';
 import mysql from 'mysql2/promise';
 import nodemailer from 'nodemailer';
 import { cloudinaryStorage, CloudinaryUnavailableError } from './cloudinary-storage.js';
-import { sendAcceptanceEmail, getMailSender, createMailTransport } from './candidate-notifications.js';
+import {
+  sendAcceptanceEmail,
+  sendGeneralEmail,
+  getMailSender,
+  createMailTransport,
+  sendEmailViaBrevo,
+  sendEmailViaResend,
+} from './candidate-notifications.js';
 import { createCsrfToken, verifyCsrfToken } from './csrf.js';
 import { MySQLSessionStore } from './mysql-session-store.js';
 import { configureProxyTrust } from './proxy-config.js';
@@ -331,21 +338,60 @@ app.post('/api/admin/applications/:id/status', requireCsrf, requireAdmin, async 
 });
 
 app.post('/api/admin/test-smtp', requireCsrf, requireAdmin, async (request, response) => {
-  const transport = mailTransport || createMailTransport();
-  if (!transport) {
-    return response.status(400).json({
-      error: 'SMTP non configuré sur ce serveur. Renseignez SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD dans l’onglet Environment de Render.',
-    });
-  }
   const to = request.body?.to || process.env.ADMIN_NOTIFICATION_EMAIL || process.env.SMTP_USER;
   if (!to) {
     return response.status(400).json({
       error: 'Aucune adresse de destination trouvée (ADMIN_NOTIFICATION_EMAIL ou SMTP_USER manquant).',
     });
   }
+  const sender = getMailSender();
+
+  // 1. Tester l'API Brevo si configurée (HTTPS port 443 - débloqué sur Render Free Tier)
+  if (process.env.BREVO_API_KEY?.trim()) {
+    try {
+      await sendEmailViaBrevo({
+        apiKey: process.env.BREVO_API_KEY,
+        from: sender,
+        to,
+        subject: 'Test Brevo API - The Face of Congo',
+        text: 'L’API Brevo (HTTPS port 443) fonctionne parfaitement sur Render !',
+        html: '<div style="font-family: sans-serif; padding: 20px; border: 1px solid #10b981; border-radius: 8px;"><h3 style="color: #059669; margin-top: 0;">API Brevo Connectée avec succès</h3><p>Ce message confirme que votre serveur Render parvient à envoyer des e-mails sans blocage de port via l’API HTTPS de Brevo.</p></div>',
+      });
+      return response.json({ success: true, to, sender, provider: 'Brevo (API HTTPS)' });
+    } catch (err) {
+      console.error('[Brevo Test Error]', err);
+      return response.status(500).json({ error: `Échec API Brevo : ${err.message}` });
+    }
+  }
+
+  // 2. Tester l'API Resend si configurée (HTTPS port 443 - débloqué sur Render Free Tier)
+  if (process.env.RESEND_API_KEY?.trim()) {
+    try {
+      await sendEmailViaResend({
+        apiKey: process.env.RESEND_API_KEY,
+        from: sender,
+        to,
+        subject: 'Test Resend API - The Face of Congo',
+        text: 'L’API Resend (HTTPS port 443) fonctionne parfaitement sur Render !',
+        html: '<div style="font-family: sans-serif; padding: 20px; border: 1px solid #10b981; border-radius: 8px;"><h3 style="color: #059669; margin-top: 0;">API Resend Connectée avec succès</h3><p>Ce message confirme que votre serveur Render parvient à envoyer des e-mails sans blocage de port via l’API HTTPS de Resend.</p></div>',
+      });
+      return response.json({ success: true, to, sender, provider: 'Resend (API HTTPS)' });
+    } catch (err) {
+      console.error('[Resend Test Error]', err);
+      return response.status(500).json({ error: `Échec API Resend : ${err.message}` });
+    }
+  }
+
+  // 3. Tester le transport SMTP standard
+  const transport = mailTransport || createMailTransport();
+  if (!transport) {
+    return response.status(400).json({
+      error: 'Aucun service d’e-mail configuré. Sur l’offre gratuite de Render, les ports SMTP classiques (25, 465, 587) sont bloqués. Ajoutez BREVO_API_KEY dans Render Environment ou renseignez vos variables SMTP.',
+    });
+  }
+
   try {
     await transport.verify();
-    const sender = getMailSender();
     await transport.sendMail({
       from: sender,
       to,
@@ -353,10 +399,14 @@ app.post('/api/admin/test-smtp', requireCsrf, requireAdmin, async (request, resp
       text: 'Le serveur de production est correctement configuré et connecté au service SMTP !',
       html: '<div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #10b981; border-radius: 8px;"><h3 style="color: #059669; margin-top: 0;">Connexion SMTP validée</h3><p>Ce message confirme que votre serveur Render parvient à communiquer avec votre messagerie SMTP et est prêt à envoyer les e-mails de validation.</p></div>',
     });
-    response.json({ success: true, to, sender });
+    response.json({ success: true, to, sender, provider: 'SMTP' });
   } catch (error) {
     console.error('[SMTP Test Error]', error);
-    response.status(500).json({ error: `Échec du test SMTP : ${error.message}` });
+    let message = error.message;
+    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+      message = 'Connection timeout. L’offre gratuite de Render bloque le trafic sortant sur les ports SMTP 25, 465 et 587. Pour contourner ce blocage sans payer, utilisez l’API gratuite de Brevo (ajoutez BREVO_API_KEY dans Render) qui passe par HTTPS (port 443).';
+    }
+    response.status(500).json({ error: `Échec du test SMTP : ${message}` });
   }
 });
 
@@ -476,15 +526,15 @@ app.post('/api/applications', requireCsrf, parsePhotos, async (request, response
       uploadedAssets.artistique?.format ?? null,
     ]);
     const adminRecipient = process.env.ADMIN_NOTIFICATION_EMAIL?.trim();
-    const adminSender = getMailSender();
-    if (mailTransport && adminRecipient && adminSender) {
+    if (adminRecipient) {
       const baseUrl = process.env.PUBLIC_BASE_URL || `${request.protocol}://${request.get('host')}`;
-      mailTransport.sendMail({
-        from: adminSender,
+      sendGeneralEmail({
         to: adminRecipient,
         subject: 'Nouvelle candidature - The Face of Congo',
         text: `Une nouvelle candidature de ${application.prenom} ${application.nom} a été reçue. Consultez le dossier dans le tableau d’administration : ${baseUrl}/admin`,
-      }).catch((error) => console.error(`Notification e-mail non envoyée : ${error.message}`));
+        html: `<p>Une nouvelle candidature de <strong>${application.prenom} ${application.nom}</strong> a été reçue.</p><p><a href="${baseUrl}/admin">Consulter le dossier d’administration</a></p>`,
+        transport: mailTransport,
+      }).catch((error) => console.error(`[Notification Admin] E-mail non envoyé : ${error.message}`));
     }
     response.status(201).json({ message: 'Votre candidature a bien été enregistrée. Merci !' });
   } catch (error) {
