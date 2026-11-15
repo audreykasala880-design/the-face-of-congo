@@ -157,17 +157,17 @@ const loginLimiter = rateLimit({
 
 app.get('/', (request, response) => response.sendFile(join(directory, 'index.html')));
 app.get('/admin', (request, response) => {
-  response.set('Cache-Control', 'no-store');
+  response.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   response.sendFile(join(directory, 'admin.html'));
 });
 app.get('/admin.html', (request, response) => {
-  response.set('Cache-Control', 'no-store');
+  response.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   response.sendFile(join(directory, 'admin.html'));
 });
 app.get('/style.css', (request, response) => response.sendFile(join(directory, 'style.css')));
 app.get('/app.js', (request, response) => response.sendFile(join(directory, 'app.js')));
 app.get('/admin.js', (request, response) => {
-  response.set('Cache-Control', 'no-store');
+  response.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   response.sendFile(join(directory, 'admin.js'));
 });
 app.get('/pwa.js', (request, response) => response.sendFile(join(directory, 'pwa.js')));
@@ -175,6 +175,7 @@ app.get('/logo.svg', (request, response) => response.sendFile(join(directory, 'l
 app.get('/manifest.webmanifest', (request, response) => response.sendFile(join(directory, 'manifest.webmanifest')));
 app.get('/icons/app-icon.svg', (request, response) => response.sendFile(join(directory, 'icons', 'app-icon.svg')));
 app.get('/service-worker.js', (request, response) => {
+  response.set('Cache-Control', 'no-store, no-cache, must-revalidate');
   response.set('Service-Worker-Allowed', '/');
   response.sendFile(join(directory, 'service-worker.js'));
 });
@@ -284,26 +285,78 @@ app.post('/api/admin/applications/:id/status', requireCsrf, requireAdmin, async 
     await connection.commit();
 
     let acceptanceEmailSent = null;
-    const shouldSendEmail = statut === 'Acceptée' && (candidate.statut !== 'Acceptée' || request.body?.resendEmail === true);
-    if (shouldSendEmail) {
-      try {
-        const sender = getMailSender();
-        acceptanceEmailSent = await sendAcceptanceEmail({
-          transport: mailTransport,
-          from: sender,
-          candidate,
-        });
-      } catch (emailError) {
+    let emailError = null;
+
+    if (statut === 'Acceptée') {
+      const transport = mailTransport || createMailTransport();
+      if (!transport) {
         acceptanceEmailSent = false;
-        console.error(`Courriel d’acceptation non envoyé pour la candidature ${id}:`, emailError);
+        emailError = 'Service SMTP non configuré sur le serveur Render (renseignez SMTP_HOST, SMTP_USER, SMTP_PASSWORD dans l’onglet Environment de Render).';
+        console.warn(`[SMTP] Candidature ${id} acceptée mais SMTP non configuré.`);
+      } else if (!candidate.email || !candidate.email.trim()) {
+        acceptanceEmailSent = false;
+        emailError = 'La candidature ne contient pas d’adresse e-mail valide.';
+      } else {
+        try {
+          const sender = getMailSender();
+          if (!sender) {
+            acceptanceEmailSent = false;
+            emailError = 'Expéditeur SMTP non défini (veuillez configurer SMTP_FROM ou SMTP_USER).';
+          } else {
+            acceptanceEmailSent = await sendAcceptanceEmail({
+              transport,
+              from: sender,
+              candidate,
+            });
+            if (acceptanceEmailSent) {
+              console.log(`[SMTP] E-mail de validation envoyé avec succès à ${candidate.email} (candidature ${id}).`);
+            } else {
+              emailError = 'L’envoi de l’e-mail a échoué.';
+            }
+          }
+        } catch (err) {
+          acceptanceEmailSent = false;
+          emailError = err.message || 'Erreur lors de l’envoi de l’e-mail.';
+          console.error(`[SMTP] Courriel non envoyé pour candidature ${id}:`, err);
+        }
       }
     }
-    response.json({ updated: true, acceptanceEmailSent });
+    response.json({ updated: true, acceptanceEmailSent, emailError });
   } catch (error) {
     if (connection) await connection.rollback().catch(() => {});
     next(error);
   } finally {
     connection?.release();
+  }
+});
+
+app.post('/api/admin/test-smtp', requireCsrf, requireAdmin, async (request, response) => {
+  const transport = mailTransport || createMailTransport();
+  if (!transport) {
+    return response.status(400).json({
+      error: 'SMTP non configuré sur ce serveur. Renseignez SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD dans l’onglet Environment de Render.',
+    });
+  }
+  const to = request.body?.to || process.env.ADMIN_NOTIFICATION_EMAIL || process.env.SMTP_USER;
+  if (!to) {
+    return response.status(400).json({
+      error: 'Aucune adresse de destination trouvée (ADMIN_NOTIFICATION_EMAIL ou SMTP_USER manquant).',
+    });
+  }
+  try {
+    await transport.verify();
+    const sender = getMailSender();
+    await transport.sendMail({
+      from: sender,
+      to,
+      subject: 'Test SMTP Production - The Face of Congo',
+      text: 'Le serveur de production est correctement configuré et connecté au service SMTP !',
+      html: '<div style="font-family: Arial, sans-serif; padding: 20px; border: 1px solid #10b981; border-radius: 8px;"><h3 style="color: #059669; margin-top: 0;">Connexion SMTP validée</h3><p>Ce message confirme que votre serveur Render parvient à communiquer avec votre messagerie SMTP et est prêt à envoyer les e-mails de validation.</p></div>',
+    });
+    response.json({ success: true, to, sender });
+  } catch (error) {
+    console.error('[SMTP Test Error]', error);
+    response.status(500).json({ error: `Échec du test SMTP : ${error.message}` });
   }
 });
 

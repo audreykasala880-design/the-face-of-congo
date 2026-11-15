@@ -53,3 +53,5 @@ services:
         sync: false
       - key: SMTP_FROM_EMAIL
         sync: false
+      - key: SMTP_REPLY_TO
+        sync: false

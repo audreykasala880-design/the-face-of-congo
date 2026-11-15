@@ -1,4 +1,4 @@
-const cacheName = 'face-of-congo-shell-v2';
+const cacheName = 'face-of-congo-shell-v3';
 const shellFiles = [
   '/',
   '/admin',

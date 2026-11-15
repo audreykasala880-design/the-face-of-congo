@@ -37,16 +37,18 @@ export function createMailTransport(env = process.env) {
   });
 }
 
-export async function sendAcceptanceEmail({ transport, from, candidate }) {
+export async function sendAcceptanceEmail({ transport, from, candidate, replyTo = null }) {
   const recipient = candidate?.email?.trim();
   if (!transport || !from || !recipient) return false;
 
   const prenom = candidate?.prenom?.trim();
   const salutation = prenom ? `Bonjour ${prenom},` : 'Bonjour,';
+  const effectiveReplyTo = replyTo || process.env.SMTP_REPLY_TO || process.env.SMTP_FROM_EMAIL || undefined;
 
   await transport.sendMail({
     from,
     to: recipient,
+    ...(effectiveReplyTo ? { replyTo: effectiveReplyTo } : {}),
     subject: 'Votre candidature est acceptée - The Face of Congo',
     text: [
       salutation,

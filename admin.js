@@ -148,7 +148,7 @@ function createApplicationRow(application) {
       if (result.acceptanceEmailSent === true) {
         notificationMessage = 'Statut mis à jour et e-mail de validation envoyé au candidat avec succès.';
       } else if (result.acceptanceEmailSent === false) {
-        notificationMessage = 'Statut mis à jour, mais le courriel n’a pas pu être envoyé. Vérifiez la configuration SMTP.';
+        notificationMessage = `Statut mis à jour, mais le courriel n’a pas pu être envoyé : ${result.emailError || 'Vérifiez la configuration SMTP.'}`;
         kind = 'error';
       }
       setMessage(dashboardMessage, notificationMessage, kind);
@@ -282,6 +282,26 @@ document.querySelector('#enable-notifications').addEventListener('click', async 
     permission === 'granted' ? 'success' : 'error',
   );
 });
+
+const testSmtpBtn = document.querySelector('#test-smtp-btn');
+if (testSmtpBtn) {
+  testSmtpBtn.addEventListener('click', async () => {
+    testSmtpBtn.disabled = true;
+    setMessage(dashboardMessage, 'Test de connexion SMTP en cours...', 'info');
+    try {
+      const result = await api('/api/admin/test-smtp', { method: 'POST' });
+      setMessage(
+        dashboardMessage,
+        `Connexion SMTP réussie ! E-mail de test envoyé à ${result.to} (expéditeur : ${result.sender}).`,
+        'success',
+      );
+    } catch (error) {
+      setMessage(dashboardMessage, `Erreur SMTP : ${error.message}`, 'error');
+    } finally {
+      testSmtpBtn.disabled = false;
+    }
+  });
+}
 
 async function initialize() {
   try {

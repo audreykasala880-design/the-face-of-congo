@@ -182,6 +182,11 @@ textarea {
     color: #205b35;
 }
 
+.notice-info {
+    background: #eff6ff;
+    color: #1e40af;
+}
+
 .notice-error {
     background: #fff0ed;
     color: #8c2f21;
