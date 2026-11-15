@@ -1,6 +1,10 @@
 import nodemailer from 'nodemailer';
 
 export function getMailSender(env = process.env) {
+  if (env.BREVO_SENDER_EMAIL?.trim()) {
+    const name = env.SMTP_FROM_NAME?.trim() || 'The Face of Congo';
+    return `"${name}" <${env.BREVO_SENDER_EMAIL.trim()}>`;
+  }
   if (env.SMTP_FROM && env.SMTP_FROM.trim()) {
     return env.SMTP_FROM.trim();
   }
@@ -67,7 +71,8 @@ export async function sendEmailViaBrevo({ apiKey, from, to, subject, text, html,
     const errorBody = await response.json().catch(() => ({}));
     throw new Error(`Brevo API (${response.status}): ${errorBody.message || response.statusText}`);
   }
-  return true;
+  const result = await response.json().catch(() => ({}));
+  return { success: true, messageId: result.messageId, sender: { name: senderName, email: senderEmail } };
 }
 
 export async function sendEmailViaResend({ apiKey, from, to, subject, text, html, replyTo }) {

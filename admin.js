@@ -290,9 +290,10 @@ if (testSmtpBtn) {
     setMessage(dashboardMessage, 'Test de connexion SMTP en cours...', 'info');
     try {
       const result = await api('/api/admin/test-smtp', { method: 'POST' });
+      const extraInfo = result.messageId ? ` [ID: ${result.messageId}]` : '';
       setMessage(
         dashboardMessage,
-        `Connexion SMTP réussie ! E-mail de test envoyé à ${result.to} (expéditeur : ${result.sender}).`,
+        `Connexion réussie (${result.provider || 'Brevo'}) ! E-mail de test envoyé à ${result.to}${extraInfo} (expéditeur : ${result.sender}). Vérifiez la boîte de réception et le dossier SPAM / Courrier indésirable.`,
         'success',
       );
     } catch (error) {

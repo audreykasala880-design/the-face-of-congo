@@ -349,7 +349,7 @@ app.post('/api/admin/test-smtp', requireCsrf, requireAdmin, async (request, resp
   // 1. Tester l'API Brevo si configurée (HTTPS port 443 - débloqué sur Render Free Tier)
   if (process.env.BREVO_API_KEY?.trim()) {
     try {
-      await sendEmailViaBrevo({
+      const brevoRes = await sendEmailViaBrevo({
         apiKey: process.env.BREVO_API_KEY,
         from: sender,
         to,
@@ -357,7 +357,13 @@ app.post('/api/admin/test-smtp', requireCsrf, requireAdmin, async (request, resp
         text: 'L’API Brevo (HTTPS port 443) fonctionne parfaitement sur Render !',
         html: '<div style="font-family: sans-serif; padding: 20px; border: 1px solid #10b981; border-radius: 8px;"><h3 style="color: #059669; margin-top: 0;">API Brevo Connectée avec succès</h3><p>Ce message confirme que votre serveur Render parvient à envoyer des e-mails sans blocage de port via l’API HTTPS de Brevo.</p></div>',
       });
-      return response.json({ success: true, to, sender, provider: 'Brevo (API HTTPS)' });
+      return response.json({
+        success: true,
+        to,
+        sender,
+        messageId: brevoRes?.messageId,
+        provider: 'Brevo (API HTTPS)',
+      });
     } catch (err) {
       console.error('[Brevo Test Error]', err);
       return response.status(500).json({ error: `Échec API Brevo : ${err.message}` });
