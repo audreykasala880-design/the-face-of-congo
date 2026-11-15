@@ -11,7 +11,7 @@ import multer from 'multer';
 import mysql from 'mysql2/promise';
 import nodemailer from 'nodemailer';
 import { cloudinaryStorage, CloudinaryUnavailableError } from './cloudinary-storage.js';
-import { sendAcceptanceEmail } from './candidate-notifications.js';
+import { sendAcceptanceEmail, getMailSender, createMailTransport } from './candidate-notifications.js';
 import { createCsrfToken, verifyCsrfToken } from './csrf.js';
 import { MySQLSessionStore } from './mysql-session-store.js';
 import { configureProxyTrust } from './proxy-config.js';
@@ -109,17 +109,15 @@ function requireAdmin(request, response, next) {
 
 const pool = mysql.createPool(databaseOptions);
 const sessionStore = new MySQLSessionStore(pool);
-const mailTransport = process.env.SMTP_HOST
-  ? nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: process.env.SMTP_SECURE === 'true',
-    auth: process.env.SMTP_USER ? {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASSWORD,
-    } : undefined,
-  })
-  : null;
+const mailTransport = createMailTransport();
+
+if (mailTransport) {
+  mailTransport.verify().then(() => {
+    console.log('Connexion SMTP vérifiée avec succès.');
+  }).catch((error) => {
+    console.warn(`Attention: la configuration SMTP ne peut pas se connecter au serveur : ${error.message}`);
+  });
+}
 
 const app = express();
 app.disable('x-powered-by');
@@ -286,16 +284,18 @@ app.post('/api/admin/applications/:id/status', requireCsrf, requireAdmin, async 
     await connection.commit();
 
     let acceptanceEmailSent = null;
-    if (statut === 'Acceptée' && candidate.statut !== 'Acceptée') {
+    const shouldSendEmail = statut === 'Acceptée' && (candidate.statut !== 'Acceptée' || request.body?.resendEmail === true);
+    if (shouldSendEmail) {
       try {
+        const sender = getMailSender();
         acceptanceEmailSent = await sendAcceptanceEmail({
           transport: mailTransport,
-          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          from: sender,
           candidate,
         });
       } catch (emailError) {
         acceptanceEmailSent = false;
-        console.error(`Courriel d’acceptation non envoyé pour la candidature ${id}: ${emailError.message}`);
+        console.error(`Courriel d’acceptation non envoyé pour la candidature ${id}:`, emailError);
       }
     }
     response.json({ updated: true, acceptanceEmailSent });
@@ -422,11 +422,13 @@ app.post('/api/applications', requireCsrf, parsePhotos, async (request, response
       uploadedAssets.artistique?.publicId ?? null,
       uploadedAssets.artistique?.format ?? null,
     ]);
-    if (mailTransport && process.env.ADMIN_NOTIFICATION_EMAIL && process.env.SMTP_FROM) {
+    const adminRecipient = process.env.ADMIN_NOTIFICATION_EMAIL?.trim();
+    const adminSender = getMailSender();
+    if (mailTransport && adminRecipient && adminSender) {
       const baseUrl = process.env.PUBLIC_BASE_URL || `${request.protocol}://${request.get('host')}`;
       mailTransport.sendMail({
-        from: process.env.SMTP_FROM,
-        to: process.env.ADMIN_NOTIFICATION_EMAIL,
+        from: adminSender,
+        to: adminRecipient,
         subject: 'Nouvelle candidature - The Face of Congo',
         text: `Une nouvelle candidature de ${application.prenom} ${application.nom} a été reçue. Consultez le dossier dans le tableau d’administration : ${baseUrl}/admin`,
       }).catch((error) => console.error(`Notification e-mail non envoyée : ${error.message}`));

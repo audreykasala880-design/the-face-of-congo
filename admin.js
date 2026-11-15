@@ -138,12 +138,20 @@ function createApplicationRow(application) {
       const result = await api(`/api/admin/applications/${encodeURIComponent(application.id)}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ statut: select.value }),
+        body: JSON.stringify({
+          statut: select.value,
+          resendEmail: select.value === 'Acceptée',
+        }),
       });
-      const notificationMessage = result.acceptanceEmailSent === false
-        ? 'Statut mis à jour, mais le courriel n’a pas pu être envoyé. Vérifiez la configuration SMTP.'
-        : 'Le statut a été mis à jour.';
-      setMessage(dashboardMessage, notificationMessage, result.acceptanceEmailSent === false ? 'error' : 'success');
+      let notificationMessage = 'Le statut a été mis à jour.';
+      let kind = 'success';
+      if (result.acceptanceEmailSent === true) {
+        notificationMessage = 'Statut mis à jour et e-mail de validation envoyé au candidat avec succès.';
+      } else if (result.acceptanceEmailSent === false) {
+        notificationMessage = 'Statut mis à jour, mais le courriel n’a pas pu être envoyé. Vérifiez la configuration SMTP.';
+        kind = 'error';
+      }
+      setMessage(dashboardMessage, notificationMessage, kind);
       await loadApplications();
     } catch (error) {
       setMessage(dashboardMessage, error.message);
