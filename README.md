@@ -39,7 +39,7 @@ En production, définissez `NODE_ENV=production`, `HOST=0.0.0.0` et, derrière u
 
 Le fichier `render.yaml` prépare un service Node Render. Connectez le dépôt à Render et créez le service depuis ce Blueprint. Render ne fournit pas de base MySQL gérée : il faut une instance MySQL distante accessible depuis Render. Renseignez ses paramètres avec TLS si le fournisseur le permet. Ajoutez aussi `CLOUDINARY_URL`, `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_NOTIFICATION_EMAIL` et les secrets SMTP dans Render. `SESSION_SECRET` est généré par Render.
 
-Le dashboard vérifie les nouvelles candidatures toutes les 30 secondes et l’admin peut autoriser les notifications système du navigateur. Pour recevoir les e-mails même lorsque le dashboard est fermé, configurez `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` et `ADMIN_NOTIFICATION_EMAIL`.
+Le dashboard vérifie les nouvelles candidatures toutes les 30 secondes et l’admin peut autoriser les notifications système du navigateur. Une transition vers le statut « Acceptée » envoie un e-mail au candidat; si l’envoi échoue, le statut reste enregistré et le dashboard affiche un avertissement. L’admin peut également supprimer une candidature, ce qui retire ses références MySQL et tente de supprimer ses photos Cloudinary. Pour recevoir les e-mails même lorsque le dashboard est fermé, configurez `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` et `ADMIN_NOTIFICATION_EMAIL`. Le Blueprint Render déploie à chaque commit sur la branche suivie.
 
 ## Installation sur téléphone
 

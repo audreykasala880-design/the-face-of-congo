@@ -256,6 +256,15 @@ textarea {
     min-height: 42px;
 }
 
+.status-form .delete-btn {
+    border-color: #9c3d32;
+    color: #8c2f21;
+}
+
+.status-form .delete-btn:hover {
+    background: #fff0ed;
+}
+
 .install-button {
     border-color: #846b1d;
     color: #5f4b0d;

@@ -125,22 +125,48 @@ function createApplicationRow(application) {
   save.type = 'submit';
   save.setAttribute('aria-label', 'Enregistrer le statut');
   save.textContent = 'OK';
-  statusForm.append(label, select, save);
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'delete-btn';
+  remove.textContent = 'Supprimer';
+  remove.setAttribute('aria-label', `Supprimer la candidature de ${name.textContent}`);
+  statusForm.append(label, select, save, remove);
   statusForm.addEventListener('submit', async (event) => {
     event.preventDefault();
     save.disabled = true;
     try {
-      await api(`/api/admin/applications/${encodeURIComponent(application.id)}/status`, {
+      const result = await api(`/api/admin/applications/${encodeURIComponent(application.id)}/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ statut: select.value }),
       });
-      setMessage(dashboardMessage, 'Le statut a été mis à jour.', 'success');
+      const notificationMessage = result.acceptanceEmailSent === false
+        ? 'Statut mis à jour, mais le courriel n’a pas pu être envoyé. Vérifiez la configuration SMTP.'
+        : 'Le statut a été mis à jour.';
+      setMessage(dashboardMessage, notificationMessage, result.acceptanceEmailSent === false ? 'error' : 'success');
       await loadApplications();
     } catch (error) {
       setMessage(dashboardMessage, error.message);
     } finally {
       save.disabled = false;
+    }
+  });
+  remove.addEventListener('click', async () => {
+    if (!window.confirm(`Supprimer définitivement la candidature de ${name.textContent} ?`)) return;
+    remove.disabled = true;
+    try {
+      const result = await api(`/api/admin/applications/${encodeURIComponent(application.id)}`, {
+        method: 'DELETE',
+      });
+      const message = result.photoCleanupPending
+        ? 'Candidature supprimée; certaines photos restent à nettoyer dans Cloudinary.'
+        : 'La candidature a été supprimée.';
+      setMessage(dashboardMessage, message, result.photoCleanupPending ? 'error' : 'success');
+      await loadApplications();
+    } catch (error) {
+      setMessage(dashboardMessage, error.message);
+    } finally {
+      remove.disabled = false;
     }
   });
   statusCell.append(statusForm);

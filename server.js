@@ -11,6 +11,7 @@ import multer from 'multer';
 import mysql from 'mysql2/promise';
 import nodemailer from 'nodemailer';
 import { cloudinaryStorage, CloudinaryUnavailableError } from './cloudinary-storage.js';
+import { sendAcceptanceEmail } from './candidate-notifications.js';
 import { createCsrfToken, verifyCsrfToken } from './csrf.js';
 import { MySQLSessionStore } from './mysql-session-store.js';
 import { configureProxyTrust } from './proxy-config.js';
@@ -260,6 +261,7 @@ app.get('/api/admin/applications', requireAdmin, async (request, response, next)
 });
 
 app.post('/api/admin/applications/:id/status', requireCsrf, requireAdmin, async (request, response, next) => {
+  let connection;
   try {
     const id = Number(request.params.id);
     const { statut } = request.body ?? {};
@@ -267,14 +269,82 @@ app.post('/api/admin/applications/:id/status', requireCsrf, requireAdmin, async 
     if (!Number.isSafeInteger(id) || id < 1 || !statuses.includes(statut)) {
       return response.status(400).json({ error: 'La mise à jour du statut est invalide.' });
     }
-    const [result] = await pool.execute('UPDATE candidatures SET statut = ? WHERE id = ?', [statut, id]);
-    if (result.affectedRows === 0) {
-      const [rows] = await pool.execute('SELECT id FROM candidatures WHERE id = ?', [id]);
-      if (!rows.length) return response.status(404).json({ error: 'Candidature introuvable.' });
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(
+      'SELECT nom, prenom, email, statut FROM candidatures WHERE id = ? FOR UPDATE',
+      [id],
+    );
+    if (!rows.length) {
+      await connection.rollback();
+      return response.status(404).json({ error: 'Candidature introuvable.' });
     }
-    response.json({ updated: true });
+
+    const candidate = rows[0];
+    await connection.execute('UPDATE candidatures SET statut = ? WHERE id = ?', [statut, id]);
+    await connection.commit();
+
+    let acceptanceEmailSent = null;
+    if (statut === 'Acceptée' && candidate.statut !== 'Acceptée') {
+      try {
+        acceptanceEmailSent = await sendAcceptanceEmail({
+          transport: mailTransport,
+          from: process.env.SMTP_FROM || process.env.SMTP_USER,
+          candidate,
+        });
+      } catch (emailError) {
+        acceptanceEmailSent = false;
+        console.error(`Courriel d’acceptation non envoyé pour la candidature ${id}: ${emailError.message}`);
+      }
+    }
+    response.json({ updated: true, acceptanceEmailSent });
   } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
     next(error);
+  } finally {
+    connection?.release();
+  }
+});
+
+app.delete('/api/admin/applications/:id', requireCsrf, requireAdmin, async (request, response, next) => {
+  let connection;
+  try {
+    const id = Number(request.params.id);
+    if (!Number.isSafeInteger(id) || id < 1) {
+      return response.status(400).json({ error: 'Identifiant de candidature invalide.' });
+    }
+
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    const [rows] = await connection.execute(`
+      SELECT photo_portrait_public_id, photo_pied_public_id, photo_artistique_public_id
+      FROM candidatures
+      WHERE id = ?
+      FOR UPDATE
+    `, [id]);
+    if (!rows.length) {
+      await connection.rollback();
+      return response.status(404).json({ error: 'Candidature introuvable.' });
+    }
+
+    const publicIds = Object.values(rows[0]).filter(Boolean);
+    await connection.execute('DELETE FROM candidatures WHERE id = ?', [id]);
+    await connection.commit();
+    connection.release();
+    connection = null;
+
+    const cleanupResults = await Promise.allSettled(publicIds.map((publicId) => cloudinaryStorage.deleteAsset(publicId)));
+    const photoCleanupPending = cleanupResults.some((result) => result.status === 'rejected');
+    if (photoCleanupPending) {
+      console.error(`Nettoyage Cloudinary incomplet après suppression de la candidature ${id}`);
+    }
+    response.json({ deleted: true, photoCleanupPending });
+  } catch (error) {
+    if (connection) await connection.rollback().catch(() => {});
+    next(error);
+  } finally {
+    connection?.release();
   }
 });
 
