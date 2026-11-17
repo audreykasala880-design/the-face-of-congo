@@ -478,7 +478,26 @@ app.get('/api/admin/applications/:id/photos/:type', requireAdmin, async (request
       return response.status(404).json({ error: 'Photo introuvable.' });
     }
     if (rows[0].public_id) {
-      return response.redirect(302, cloudinaryStorage.privateDownloadUrl(rows[0].public_id, rows[0].format));
+      const signedUrl = cloudinaryStorage.privateDownloadUrl(rows[0].public_id, rows[0].format);
+      let imageResponse;
+      try {
+        imageResponse = await fetch(signedUrl);
+      } catch (fetchErr) {
+        return response.status(502).json({ error: 'Impossible de récupérer la photo depuis Cloudinary.' });
+      }
+      if (!imageResponse.ok) {
+        return response.status(502).json({ error: `Cloudinary a retourné une erreur: ${imageResponse.status}` });
+      }
+      const contentType = imageResponse.headers.get('content-type') || `image/${rows[0].format || 'jpeg'}`;
+      response.set({
+        'Content-Type': contentType,
+        'Content-Disposition': `inline; filename="candidature-${id}-${request.params.type}.${rows[0].format || 'jpg'}"`,
+        'Cache-Control': 'private, no-store',
+        'X-Content-Type-Options': 'nosniff',
+      });
+      const { Readable } = await import('node:stream');
+      Readable.fromWeb(imageResponse.body).pipe(response);
+      return;
     }
     response.set({
       'Content-Type': rows[0].legacy_mime,
